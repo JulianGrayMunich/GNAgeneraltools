@@ -7,14 +7,23 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="EASendMail" Version="7.9.0.1" />
+    <PackageReference Include="EASendMail" Version="7.9.2.6" />
     <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
-    <PackageReference Include="Microsoft.Win32.Registry.AccessControl" Version="6.0.0" />
     <PackageReference Include="NETStandard.Library" Version="2.0.3" />
-    <PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0" />
     <PackageReference Include="System.IO" Version="4.3.0" />
     <PackageReference Include="System.IO.FileSystem" Version="4.3.0" />
     <PackageReference Include="System.Runtime" Version="4.3.1" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+    <PackageReference Include="Twilio" Version="7.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="gnaDataClasses">
+      <HintPath>..\..\gnaDataClasses\gnaDataClasses\obj\Release\net6.0\gnaDataClasses.dll</HintPath>
+    </Reference>
+    <Reference Include="GNAspreadsheettools">
+      <HintPath>..\..\GNAspreadsheettools\GNAspreadsheettools\bin\Release\net6.0\GNAspreadsheettools.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
