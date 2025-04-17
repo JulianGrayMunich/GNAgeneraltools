@@ -1,24 +1,34 @@
-﻿using System.Globalization;
+﻿using System;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Security.Cryptography;
+using System.Globalization;
 using System.Timers;
-
 using gnaDataClasses;
 
 using EASendMail; //add EASendMail namespace (This needs the license code till 2028: ES-E1646458156-01989-1A16E5275AF48A22-686E917424789B4F)
 using Microsoft.Win32;
+using Twilio;
 using Twilio.Rest.Api.V2010.Account;
+using OfficeOpenXml;
+
+
 
 
 
 
 #pragma warning disable CS8600
+
 #pragma warning disable IDE0059
+#pragma warning disable IDE0063
 #pragma warning disable IDE1006
-#pragma warning disable CA1822
+
 #pragma warning disable CS8602
 #pragma warning disable CS8603
 #pragma warning disable CS8604
+#pragma warning disable CS8618
 #pragma warning disable CS8622
-#pragma warning disable CA1416
 
 
 
@@ -36,6 +46,7 @@ namespace GNAgeneraltools
         // 20240509 Create updateNoDataAlarmFile
         // 20240522 Creaate doesFileExist
         // 20240531 Added the software name to the copyright notice
+        // 20241014 added the external software license module
 
 
         //=====[Notes]=============
@@ -48,8 +59,91 @@ namespace GNAgeneraltools
         //================[instantiate the classes]=========
         gnaDataClass gnaDC = new();
 
+        //================[Global constants]===============
 
-        //================[File management Methods ]========
+
+        public static class GlobalConst
+        {
+            public const string Tab1 = "     ";
+            public const string Tab2 = "        ";
+            public const string Tab3 = "           ";
+        }
+
+
+        //================[Licenses]========================
+
+        public void epplusLicense()
+        {
+
+            //ExcelPackage.LicenseContext = LicenseContext.Commercial;
+            ExcelPackage.License.SetCommercial("GLKaX6q87MCqgpnTW0VeLWonJZxxBWhrLGUYIwYIap3sQwUClECEr+MXsiCn7xi5EIukcnvQCBgecfAJtn3xGgEGQzVDRjMz5wdPACsDAQEA");  //Sets your license key in code.
+            return;
+        }
+
+        public string commercialSoftwareLicense(string software)
+        {
+            // use
+            //  license = gnaT.commercialSoftwareLicense("email");
+            //  SmtpMail oMail = new(license)
+            //
+            string license = "";
+            software = software.Trim();
+            switch (software)
+            {
+                case "email":
+                    //  license to 2028
+                    license = "ES-E1646458156-01989-1A16E5275AF48A22-686E917424789B4F";
+                    break;
+                default:
+                    license = "empty";
+                    break;
+            }
+            return license;
+        }
+
+
+        public static class TwilioCredentialsHelper
+        {
+            public const string CredentialsPath = "C:\\__SystemCredentials\\TwilioCredentials.bin";
+
+            public static void LoadCredentials(out string accountSid, out string authToken, out string senderPhone)
+            {
+                byte[] encrypted = File.ReadAllBytes(CredentialsPath);
+
+                byte[] key = Encoding.ASCII.GetBytes("GNA2025Encrypt"); // 14 bytes
+                byte[] iv = Encoding.ASCII.GetBytes("InitVectorAES128"); // 16 bytes
+                Array.Resize(ref key, 16); // pad to 16 bytes
+
+                using (Aes aes = Aes.Create())
+                {
+                    aes.Key = key;
+                    aes.IV = iv;
+
+                    ICryptoTransform decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
+
+                    using (MemoryStream ms = new MemoryStream(encrypted))
+                    using (CryptoStream cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
+                    using (StreamReader sr = new StreamReader(cs))
+                    {
+                        string json = sr.ReadToEnd();
+                        var credentials = JsonSerializer.Deserialize<TwilioCredentials>(json);
+                        accountSid = credentials.TwilioAccountSid;
+                        authToken = credentials.TwilioAuthToken;
+                        senderPhone = credentials.SenderPhone;
+                    }
+                }
+            }
+
+            private class TwilioCredentials
+            {
+                public string TwilioAccountSid { get; set; }
+                public string TwilioAuthToken { get; set; }
+                public string SenderPhone { get; set; }
+            }
+        }
+    
+
+    //================[File management Methods ]========
 
         public Int32 CountLinesLINQ(FileInfo file) => File.ReadLines(file.FullName).Count();
 
@@ -92,7 +186,7 @@ namespace GNAgeneraltools
             for (int i = 0; i < iPrismCount - 1; i++)
             {
 
-                Double dblDist = Math.Round(Math.Pow(Math.Pow(prism[i + 1].E - prism[i].E, 2) + Math.Pow(prism[i + 1].N - prism[i].N, 2), 0.5), 2);
+                Double dblDist = Math.Round(Math.Pow(Math.Pow(prism[i + 1].E - prism[i].E, 2) + Math.Pow(prism[i + 1].N - prism[i].N, 2), 0.5), 4);
 
                 if (dblDist < 0.05)
                 {
@@ -116,18 +210,26 @@ namespace GNAgeneraltools
 
         public void checkReportingSchedule(string strTimeBlockType, string strSMSTitle)
         {
+       
 
             if (strTimeBlockType == "Manual")
             {
                 // send a warning sms
                 string strMessage = strSMSTitle + "\nManual time schedule";
                 sendSMS(strMessage, "None", "None", "Yes");
-                Console.WriteLine("     SMS warning issued");
+                Console.WriteLine(GlobalConst.Tab1 + "Manual: SMS warning issued");
+            }
+            else if (strTimeBlockType == "Historic")
+            {
+                // send a warning sms
+                string strMessage = strSMSTitle + "\nHistoric time schedule";
+                sendSMS(strMessage, "None", "None", "Yes");
+                Console.WriteLine(GlobalConst.Tab1+ "Historic: SMS warning issued");
             }
             else
             {
 
-                Console.WriteLine("     No warning issued");
+                Console.WriteLine(GlobalConst.Tab1 + "Schedule: No warning issued");
             }
         }
 
@@ -174,20 +276,17 @@ namespace GNAgeneraltools
         public void WelcomeMessage(string strMessage)
         {
             Console.Title = strMessage;
-            Console.WriteLine(" ");
-            Console.WriteLine("GNA Geomatics software");
+            Console.WriteLine("\nGNA Geomatics software");
             Console.WriteLine("Julian Gray");
             Console.WriteLine("+49 176 7299 7904");
             Console.WriteLine("gna.geomatics@gmail.com");
-            Console.WriteLine(" ");
-            Console.WriteLine(strMessage);
-            Console.WriteLine("");
+            Console.WriteLine("\n" + strMessage + "\n");
         }
 
 
         public string addCopyright(string software, string strIncomingMessage)
         {
-            string strCopyRight = "\n©2024 GNA Geomatics";
+            string strCopyRight = "\n©2025 GNA Geomatics";
             software = software.Trim();
             if (software.Length > 0)
             {
@@ -196,6 +295,7 @@ namespace GNAgeneraltools
             string strOutgoingMessage = strIncomingMessage + strCopyRight;
             return strOutgoingMessage;
         }
+
 
         //=================[ Registry methods ]====================================================
 
@@ -260,7 +360,8 @@ namespace GNAgeneraltools
             {
                 try
                 {
-                    SmtpMail oMail = new("ES-E1646458156-01989-1A16E5275AF48A22-686E917424789B4F")
+                    string license = commercialSoftwareLicense("email");
+                    SmtpMail oMail = new(license)
                     {
                         From = "gna.geomatics@gmail.com",
                         To = new AddressCollection("gna.geomatics@gmail.com"),
@@ -430,7 +531,7 @@ namespace GNAgeneraltools
                 Registry.CurrentUser.DeleteSubKey(strReferenceDateSubKey, false);
                 Registry.CurrentUser.DeleteSubKey(strDurationSubKey, false);
 
-                Console.WriteLine("\nThe software license for "+ software+"  has expired.");
+                Console.WriteLine("\nThe software license for " + software + "  has expired.");
                 Console.WriteLine("Contact Julian Gray to reactivate:");
                 Console.WriteLine("gna.geomatics@gmail.com");
                 Console.WriteLine("+49 176 7299 7904");
@@ -450,7 +551,7 @@ namespace GNAgeneraltools
                 try
                 {
                     string strMessage = strProject + " (" + strSoftwareLicenseTag + ")\nRemaining days: " + iRemainingDays.ToString();
-                    strMessage = addCopyright(software,strMessage);
+                    strMessage = addCopyright(software, strMessage);
 
                     SmtpMail oMail = new("ES-E1646458156-01989-1A16E5275AF48A22-686E917424789B4F")
                     {
@@ -591,6 +692,39 @@ namespace GNAgeneraltools
         }
 
 
+        public string convertLocalToUTC(string localTime)
+        {
+            //Console.WriteLine("yyyy-MM-dd HH:mm");
+            //Console.WriteLine("localTime as received "+ localTime);
+
+
+
+            localTime = localTime.Replace("'", "").Trim() ;
+            // Remove the seconds if they have been appended
+            if (localTime.Length >= 19) { localTime = localTime.Substring(0, 16); }
+
+            //Console.WriteLine("localTime afterwards " + localTime);
+            //Console.ReadKey();
+
+            //Console.WriteLine(localTime+" " + localTime.Length);
+            //Console.WriteLine("yyyy-MM-dd HH:mm");
+            //Console.ReadKey();
+
+            string format = "yyyy-MM-dd HH:mm"; // Expected format without single quotes
+            //string format2 = "yyyy-MM-dd HH:mm:ss"; // Expected format without single quotes
+            CultureInfo culture = CultureInfo.InvariantCulture;
+
+            // parse
+            DateTime localDateTime = DateTime.ParseExact(localTime, format, culture);
+
+            // Convert to UTC
+            DateTime utcDateTime = localDateTime.ToUniversalTime();
+
+            // Format back with single quotes
+            return $"'{utcDateTime.ToString(format)}'";
+        }
+
+
         public string convertUTCToLocal(string strUTCTime)
         {
             // Purpose: 
@@ -603,68 +737,24 @@ namespace GNAgeneraltools
             //      strLocaltime = convertUTCToLocal(strUTCTime);
             // 
 
-            // strip off the ' if they exist
-
-
-            //Console.WriteLine("local time: " + strLocalTime);
-            //Console.WriteLine("Press key..."); Console.ReadKey();
-
             strUTCTime = strUTCTime.Replace("'", "").Trim();
+            // Remove the seconds if they have been appended
+            if(strUTCTime.Length >= 19) { strUTCTime = strUTCTime.Substring(0, 16); }
 
-            DateTime dtNowLocal = DateTime.Now;
-            DateTime dtNowUTC = DateTime.UtcNow;
+            const string format = "yyyy-MM-dd HH:mm"; // Expected format
 
-            //DateTime dtUTCTime = DateTime.ParseExact(strUTCTime, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            // Remove single quotes before parsing
+            DateTime utcDateTime = DateTime.ParseExact(strUTCTime.Replace("'",""), format, CultureInfo.InvariantCulture);
 
-            DateTime dtUTCTime = DateTime.Parse(strUTCTime, CultureInfo.InvariantCulture);
+            // Explicitly set DateTimeKind.Utc
+            utcDateTime = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
 
-            double dblHoursOffset = Math.Round((dtNowLocal - dtNowUTC).Minutes / 60.0, 0);
+            // Convert UTC to local time
+            DateTime localDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, TimeZoneInfo.Local);
 
-            DateTime dtLocaltime = dtUTCTime.AddHours(dblHoursOffset);
+            // Return formatted local time with single quotes
+            return $"'{localDateTime.ToString(format)}'";
 
-            string strLocaltime = " '" + dtLocaltime.ToString("yyyy-MM-dd HH:mm") + "'";
-
-            return strLocaltime;
-        }
-
-
-
-
-
-        public string convertLocalToUTC(string strLocalTime)
-        {
-            // Purpose: 
-            //      To convert the local time string to UTC time string
-            // Input: 
-            //      strLocalTime: '2022-08-01 00:00'
-            // Output:
-            //      strUTCtime: '2022-08-01 00:00'
-            // Use:
-            //      strUTCtime = convertLocalToUTC(strLocalTime);
-            // 
-
-            // strip off the ' if they exist
-
-
-            //Console.WriteLine("local time: " + strLocalTime);
-            //Console.WriteLine("Press key..."); Console.ReadKey();
-
-            strLocalTime = strLocalTime.Replace("'", "").Trim();
-
-            DateTime dtNowLocal = DateTime.Now;
-            DateTime dtNowUTC = DateTime.UtcNow;
-
-            //DateTime dtLocalTime = DateTime.ParseExact(strLocalTime, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-
-            DateTime dtLocalTime = DateTime.Parse(strLocalTime, CultureInfo.InvariantCulture);
-
-            double dblHoursOffset = Math.Round((dtNowUTC - dtNowLocal).Minutes / 60.0, 0);
-
-            DateTime dtUTCtime = dtLocalTime.AddHours(dblHoursOffset);
-
-            string strUTCtime = " '" + dtUTCtime.ToString("yyyy-MM-dd HH:mm") + "'";
-
-            return strUTCtime;
         }
 
         public string[,] generateTimeBlockArray(int iTimeBlockSize, int iNoOfDays)
@@ -871,6 +961,14 @@ namespace GNAgeneraltools
         }
 
 
+
+
+
+
+
+
+
+
         //================[ Alarm Methods ]=================================================================
 
         // create an alarm log file to upate the Alarm Log File - seperate updating the file and sending emails.
@@ -890,8 +988,6 @@ namespace GNAgeneraltools
             var currentState = new List<string>();
             int j = 0;
 
-
-            string strSendEmail = "";
 
             string strFileName = "AlarmStatus.txt";
             string alarmFile = strSystemLogFolder + strFileName;
@@ -1142,7 +1238,7 @@ namespace GNAgeneraltools
             checkFileExistance(strCurrentGKAfolder, strFileName);
 
             // Get the date/time stamp
-            string strNow = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm") + " : ";
+            string strNow = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm") + ": ";
 
             if (strSubjectLine != "Do nothing")
             {
@@ -1167,6 +1263,7 @@ namespace GNAgeneraltools
             string strFileName = "SystemActivityLog.txt";
             string activityLog = strLogfolder + strFileName;
             checkFileExistance(strLogfolder, strFileName);
+            string DateTimeNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm") + ": ";
 
 
 
@@ -1183,6 +1280,8 @@ namespace GNAgeneraltools
             //}
 
             //Get the date / time stamp
+
+            strActivityComment = DateTimeNow + strActivityComment;
 
             if (strActivityComment != "Do nothing")
             {
@@ -1343,6 +1442,8 @@ namespace GNAgeneraltools
 
             // updated with the 2024 license
 
+
+
             try
             {
                 SmtpMail oMail = new("ES-E1646458156-01989-1A16E5275AF48A22-686E917424789B4F")
@@ -1366,7 +1467,7 @@ namespace GNAgeneraltools
                 SmtpClient oSmtp = new();
                 oSmtp.SendMail(oServer, oMail);
 
-                Console.WriteLine("email sent...");
+                Console.WriteLine(GlobalConst.Tab2+"email sent...");
             }
             catch (Exception ep)
             {
@@ -1395,7 +1496,8 @@ namespace GNAgeneraltools
             string authToken = "e3bcb8e6aa257fcd3db33af0e77da99b";
             string strJAGUKphone = "+447729481504";
             string strJAGDEphone = "+4917672997904";
-            strMessage = addCopyright("",strMessage);
+            strMessage = addCopyright("", strMessage);
+
 
             // initialise the TwilioClient
             Twilio.TwilioClient.Init(accountSid, authToken);
@@ -1404,7 +1506,7 @@ namespace GNAgeneraltools
             {
                 //Console.WriteLine("1st sms");
 
-                Console.WriteLine("     SMS to: " + strPhone1.Trim());
+                Console.WriteLine(GlobalConst.Tab3+"SMS to: " + strPhone1.Trim());
                 var message = MessageResource.Create(
                      body: strMessage,
                      from: new Twilio.Types.PhoneNumber("+447782585652"),
@@ -1416,7 +1518,7 @@ namespace GNAgeneraltools
             {
                 //Console.WriteLine("2nd sms");
 
-                Console.WriteLine("     SMS to: " + strPhone2.Trim());
+                Console.WriteLine(GlobalConst.Tab1 + "SMS to: " + strPhone2.Trim());
                 var message = MessageResource.Create(
                     body: strMessage,
                     from: new Twilio.Types.PhoneNumber("+447782585652"),
@@ -1427,7 +1529,7 @@ namespace GNAgeneraltools
             if (strJAGaction == "Yes")
             {
 
-                Console.WriteLine("     SMS to: JAG");
+                Console.WriteLine(GlobalConst.Tab1 + "SMS to: JAG");
                 var message = MessageResource.Create(
                     body: strMessage,
                     from: new Twilio.Types.PhoneNumber("+447782585652"),
@@ -1438,7 +1540,7 @@ namespace GNAgeneraltools
             if (strJAGaction == "DE")
             {
 
-                Console.WriteLine("     SMS to: JAG");
+                Console.WriteLine(GlobalConst.Tab1 + "SMS to: JAG");
                 var message = MessageResource.Create(
                     body: strMessage,
                     from: new Twilio.Types.PhoneNumber("+447782585652"),
@@ -1449,7 +1551,7 @@ namespace GNAgeneraltools
             if (strJAGaction == "UK")
             {
 
-                Console.WriteLine("     SMS to: JAG");
+                Console.WriteLine(GlobalConst.Tab1 + "SMS to: JAG");
                 var message = MessageResource.Create(
                     body: strMessage,
                     from: new Twilio.Types.PhoneNumber("+447782585652"),
@@ -1458,7 +1560,72 @@ namespace GNAgeneraltools
             }
         }
 
-        public void sendSMSArray(string strSMSmessage, string[] smsMobile)
+        public bool sendSMSArray(string strSMSmessage, string[] smsMobile)
+        {
+            //
+            // Purpose:
+            //      To send an SMS message to up to 9 recipients
+            // Usage:
+            //      bool result = gna.sendSMSArray(strSMSmessage, smsMobile);
+            //
+
+
+            // Load encrypted credentials
+            // create the Twilio credentials using the clients licenses with TwilioCredentialsBinGenerator
+            // The credentials will be loaded into the folder C:\__SystemCredentials
+            // This folder must be uploaded to the clients server. 
+            TwilioCredentialsHelper.LoadCredentials(out string accountSid, out string authToken, out string senderPhone);
+
+            bool allSucceeded = true;
+
+            try
+            {
+                strSMSmessage = addCopyright("", strSMSmessage);
+
+                // Initialise Twilio client
+                Twilio.TwilioClient.Init(accountSid, authToken);
+
+
+                for (int i = 0; i < smsMobile.Length; i++)
+                {
+                    string strPhone = smsMobile[i];
+
+                    if (!string.IsNullOrWhiteSpace(strPhone) &&
+                        strPhone != "None" &&
+                        strPhone.StartsWith("+"))
+                    {
+                        try
+                        {
+                            Console.WriteLine(GlobalConst.Tab2 + strPhone);
+                            Console.WriteLine(GlobalConst.Tab3 + "send");
+
+                            var message = MessageResource.Create(
+                                body: strSMSmessage,
+                                from: new Twilio.Types.PhoneNumber(senderPhone),
+                                to: new Twilio.Types.PhoneNumber(strPhone.Trim())
+                            );
+                        }
+                        catch (Exception epInner)
+                        {
+                            Console.WriteLine(GlobalConst.Tab3 + "Failed to send to " + strPhone);
+                            Console.WriteLine(GlobalConst.Tab3 + epInner.Message);
+                            allSucceeded = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception ep)
+            {
+                Console.WriteLine("Failed to send SMS (GNAgeneraltools/sendSMSArray)");
+                Console.WriteLine(ep.Message);
+                return false;
+            }
+
+            return allSucceeded;
+        }
+
+
+        public void sendSMSArray_OLD(string strSMSmessage, string[] smsMobile)
         {
             //
             // Purpose:
@@ -1466,37 +1633,139 @@ namespace GNAgeneraltools
             // Useage:
             //      gna.sendSMS(strSMSmessage);
             //
+
+
+
+
+
             try
             {
                 string accountSid = "AC9fb2a010982500ddb640c5a108f57a28";
                 string authToken = "e3bcb8e6aa257fcd3db33af0e77da99b";
                 strSMSmessage = addCopyright("", strSMSmessage);
+                string strPhone = "";
 
                 // initialise the TwilioClient
                 Twilio.TwilioClient.Init(accountSid, authToken);
 
+
                 for (int i = 1; i <= 9; i++)
                 {
-                    if (smsMobile[i] != "None")
+                    strPhone = smsMobile[i];
+
+                    if ((strPhone != "None") && (strPhone[..1] == "+"))
                     {
+                        Console.WriteLine(GlobalConst.Tab2 + strPhone);
+                        Console.WriteLine(GlobalConst.Tab3 + "send");
                         var message = MessageResource.Create(
                          body: strSMSmessage,
                          from: new Twilio.Types.PhoneNumber("+447782585652"),
-                         to: new Twilio.Types.PhoneNumber(smsMobile[i].Trim())
+                         to: new Twilio.Types.PhoneNumber(strPhone.Trim())
                          );
                     }
                 }
             }
             catch (Exception ep)
             {
-                Console.WriteLine("Failed to send SMS (gneGeneralTools/sendSMS)");
-                Console.WriteLine("");
-                Console.WriteLine(ep.Message);
-                Console.ReadKey();
+                Console.WriteLine("Failed to send SMS (GNAgeneraltools/sendSMSArray)");
+                Console.WriteLine("\n" + ep.Message);
             }
         }
 
 
+        public bool sendSMSArray_OLD2(string strSMSmessage, string[] smsMobile)
+        {
+            //
+            // Purpose:
+            //      To send an SMS message to up to 9 recipients
+            // Usage:
+            //      bool result = gna.sendSMSArray(strSMSmessage, smsMobile);
+            //
 
+            const string accountSid = "AC9fb2a010982500ddb640c5a108f57a28";
+            const string authToken = "e3bcb8e6aa257fcd3db33af0e77da99b";
+            const string senderPhone = "+447782585652";
+
+            bool allSucceeded = true;
+
+            try
+            {
+                strSMSmessage = addCopyright("", strSMSmessage);
+
+                // Initialise Twilio client
+                Twilio.TwilioClient.Init(accountSid, authToken);
+
+
+                for (int i = 0; i < smsMobile.Length; i++)
+                {
+                    string strPhone = smsMobile[i];
+
+                    if (!string.IsNullOrWhiteSpace(strPhone) &&
+                        strPhone != "None" &&
+                        strPhone.StartsWith("+"))
+                    {
+                        try
+                        {
+                            Console.WriteLine(GlobalConst.Tab2 + strPhone);
+                            Console.WriteLine(GlobalConst.Tab3 + "send");
+
+                            var message = MessageResource.Create(
+                                body: strSMSmessage,
+                                from: new Twilio.Types.PhoneNumber(senderPhone),
+                                to: new Twilio.Types.PhoneNumber(strPhone.Trim())
+                            );
+                        }
+                        catch (Exception epInner)
+                        {
+                            Console.WriteLine(GlobalConst.Tab3 + "Failed to send to " + strPhone);
+                            Console.WriteLine(GlobalConst.Tab3 + epInner.Message);
+                            allSucceeded = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception ep)
+            {
+                Console.WriteLine("Failed to send SMS (GNAgeneraltools/sendSMSArray)");
+                Console.WriteLine(ep.Message);
+                return false;
+            }
+
+            return allSucceeded;
+        }
+
+
+        //================[ Helper Methods ]============================================================================
+
+        public List<Tuple<string, string>> GenerateTimeBlocks(string manualBlockStart, string manualBlockEnd, double blockSizeInHours)
+        {
+            if (blockSizeInHours <= 0 || 24 % blockSizeInHours != 0)
+                throw new ArgumentException("Block size must be a factor of 24.");
+
+            List<Tuple<string, string>> timeBlocks = new List<Tuple<string, string>>();
+            string format = "yyyy-MM-dd HH:mm"; // Desired format
+            CultureInfo culture = CultureInfo.InvariantCulture;
+
+            // Remove leading and trailing single quotes before parsing
+            DateTime startTime = DateTime.ParseExact(manualBlockStart.Trim('\''), format, culture);
+            DateTime endTime = DateTime.ParseExact(manualBlockEnd.Trim('\''), format, culture);
+            DateTime currentStart = startTime;
+
+            while (currentStart < endTime)
+            {
+                DateTime currentEnd = currentStart.AddHours(blockSizeInHours);
+                if (currentEnd > endTime)
+                    currentEnd = endTime; // Ensure we do not exceed the manualBlockEnd
+
+                // Format the output with bracketing single quotes
+                string formattedStart = $"'{currentStart.ToString(format)}'";
+                string formattedEnd = $"'{currentEnd.ToString(format)}'";
+
+                timeBlocks.Add(Tuple.Create(formattedStart, formattedEnd));
+                currentStart = currentEnd; // Move to the next sub-block
+            }
+
+            return timeBlocks;
+        }
     }
 }
